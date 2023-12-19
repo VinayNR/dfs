@@ -23,7 +23,7 @@
 ### Running the Code
 
 #### Client
-`Run make` inside the client directory and start the client providing the path to the config file
+Run `make` inside the client directory and start the client providing the path to the config file
 
 #### Server
 Run `make` inside the file, node and auth directories inside the server path to launch the instances of the authorization, metadata and the data servers. Each will open port/s for the connections to the other components.
