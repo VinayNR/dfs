@@ -1,6 +1,6 @@
 # A Distributed File System Implementation in C++
 
-## The distributed file system consists of the client and the server as primary components. The client is allowed to add a file, and query for a file from the filesystem to begin with. The server consists of 3 components
+### The distributed file system consists of the client and the server as primary components. The client is allowed to add a file, and query for a file from the filesystem to begin with. The server consists of 3 components
 
 ## Server Components
 
