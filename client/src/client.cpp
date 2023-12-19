@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <thread>
 
 #include "client.h"
 #include "net/sockets.h"
@@ -83,6 +84,7 @@ void DFSClient::start() {
                 close(sockfd);
                 continue;
             }
+            delete request;
 
             // wait for a response
             response = _client_handler->readResponse(sockfd);
@@ -94,36 +96,67 @@ void DFSClient::start() {
             Block block;
             std::vector<Block> blocks;
             
-            for (std::string option: options) {
+            for (std::string option: response->options) {
                 std::stringstream ss(option);
                 ss >> block.block_id >> block.start >> block.end >> block.location.ip >> block.location.port;
                 blocks.push_back(block);
             }
+
+            delete response;
+
+            // write the blocks to the node servers
             writeBlocks(file_contents, blocks);
         }
         else if (command.type == "get") {
-
+            
         }
         else if (command.type == "list") {
 
         }
-        
-        delete request;
-        delete response;
         close(sockfd);
     }
 }
 
-void DFSClient::writeBlocks(const char *file_contents, const std::vector<Block> &blocks) {
-    for (const Block &block: blocks) {
-        // construct the command object
-        Command command {"put", block.block_id};
-        // construct the data object
-        Data data{file_contents + block.start, block.end - block.start + 1};
-        // construct the request object
-        Request *request = _client_handler->constructRequest(command, data, _access_token);
+void DFSClient::writeBlock(const char *file_contents, Block block) {
+    Command command {"put", block.block_id};
 
-        // connect to the serve
+    char *block_contents = new char[block.end - block.start + 2];
+    memset(block_contents, 0, block.end - block.start + 2);
+    memcpy(block_contents, file_contents + block.start, block.end - block.start + 1);
+
+    Data data{block_contents, block.end - block.start + 1};
+
+    Request *request = _client_handler->constructRequest(command, data, _access_token);
+
+    // Connect to the server
+    int sockfd = connectToServer(block.location.ip.c_str(), std::to_string(block.location.port).c_str());
+
+    // send the request
+    _client_handler->writeRequest(sockfd, request);
+
+    // wait for the response
+    Response *response = _client_handler->readResponse(sockfd);
+
+    if (response->code == "201") {
+        std::cout << "Block written successfully!" << std::endl;
+    }
+
+    delete request;
+    delete response;
+    delete[] block_contents;
+    close(sockfd);
+}
+
+void DFSClient::writeBlocks(const char *file_contents, const std::vector<Block> &blocks) {
+    std::vector<std::thread> threads;
+
+    for (const Block &block : blocks) {
+        threads.emplace_back(&DFSClient::writeBlock, this, file_contents, block);
+    }
+
+    // Join all the threads to wait for their completion
+    for (auto &thread : threads) {
+        thread.join();
     }
 }
 

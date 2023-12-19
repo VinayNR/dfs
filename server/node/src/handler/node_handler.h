@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../formats/message.h"
+#include "../vo/request.h"
+#include "../vo/response.h"
 
 class NodeServiceHandler {
     private:
@@ -16,4 +18,7 @@ class NodeServiceHandler {
 
         int writeNodeConnectRequest(int, NodeConnectRequest*);
         LeaderResponse* readLeaderResponse(int);
+
+        Request * readFileRequest(int);
+        int writeFileReceiptResponse(int, Response *);
 };

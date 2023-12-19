@@ -10,6 +10,9 @@ NodeServer::NodeServer(const char *config_file_path) {
 
     // get an instance of the node service handler
     _node_handler = NodeServiceHandler::getInstance();
+
+    // get an instance of the file service handler
+    _file_handler = FileHandler::getInstance();
 }
 
 void NodeServer::setupSocket() {
@@ -69,6 +72,9 @@ int NodeServer::discover() {
 void NodeServer::processClientRequests() {
     std::cout << std::endl << " ------ Node Server Thread Pool: " << std::this_thread::get_id() << " ------ " << std::endl;
 
+    Request *request;
+    Response *response;
+
     while (true) {
         // take a connection from the queue
         int client_sockfd = _client_requests_queue->dequeue();
@@ -78,7 +84,24 @@ void NodeServer::processClientRequests() {
             std::cout << std::this_thread::get_id() << " obtained a client socket: " << client_sockfd << std::endl;
 
             // do something here
-            
+            request = _node_handler->readFileRequest(client_sockfd);
+
+            // handle the request
+            if (request->command.type == "put") {
+                // write the file to disk
+                _file_handler->putFile(request->command.option.c_str(), request->data.data, request->data.size);
+
+                // send a repsonse back
+                response = Response::createFileSuccessResponse();
+                _node_handler->writeFileReceiptResponse(client_sockfd, response);
+            }
+            else if (request->command.type == "get") {
+
+            }
+
+            // clean up
+            delete request;
+            delete response;
 
             // close the socket after communication is complete
             close(client_sockfd);

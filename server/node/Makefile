@@ -1,5 +1,5 @@
 CC = g++  # Compiler
-CFLAGS = -std=c++11  # Compiler flags
+CFLAGS = -std=c++14  # Compiler flags
 
 nodeserver = nodeserver
 

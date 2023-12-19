@@ -31,5 +31,7 @@ class DFSClient {
         DFSClient(char *);
 
         void start();
+        void writeBlock(const char *, Block);
         void writeBlocks(const char *, const std::vector<Block> &);
+        
 };

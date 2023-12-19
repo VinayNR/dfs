@@ -5,6 +5,7 @@
 #include "concurrency/queue.h"
 #include "config/configs.h"
 #include "handler/node_handler.h"
+#include "handler/file_handler.h"
 
 class NodeServer {
     private:
@@ -28,6 +29,9 @@ class NodeServer {
 
         // handler for client requests
         NodeServiceHandler *_node_handler;
+
+        // handler for reading and writing files to disk
+        FileHandler *_file_handler;
 
         void processClientRequests();
 
