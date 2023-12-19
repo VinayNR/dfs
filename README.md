@@ -18,3 +18,12 @@
 
 ### Client
 #### The distributed client is allowed to issue GET and PUT requests to the filesystem. Each authorized client is allowed to issue these requests upon successful authentication with the server. The client first issues a PUT request to the metadata server, which replies back with the locations of blocks for the file. Subsequently, the client parallely issues a PUT request to the data servers to store the copies of each block in their file system. Similarly, for each GET request, the client asks the location of blocks for the file from the metadata server. After this the client is able to independently request the file blocks and assemble itself to receive the file from the respective data servers
+
+
+### Running the Code
+
+#### Client
+`Run make` inside the client directory and start the client providing the path to the config file
+
+#### Server
+Run `make` inside the file, node and auth directories inside the server path to launch the instances of the authorization, metadata and the data servers. Each will open port/s for the connections to the other components.
