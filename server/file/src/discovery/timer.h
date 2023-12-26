@@ -6,7 +6,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "node.h"
+#include "../vo/node.h"
 
 using NodeTimerCallback = std::function<void(INode)>;
 

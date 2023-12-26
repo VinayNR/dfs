@@ -8,7 +8,7 @@
 #include <functional>
 
 #include "timer.h"
-#include "node.h"
+#include "../vo/node.h"
 
 using NodeEvictionCallback = std::function<void(INode)>;
 

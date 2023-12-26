@@ -6,7 +6,6 @@
 #include "net/sockets.h"
 #include "net/utils.h"
 #include "utils/utils.h"
-#include "vo/blocks.h"
 
 
 DFSClient::DFSClient(char *filename) {
@@ -17,7 +16,7 @@ DFSClient::DFSClient(char *filename) {
     _auth_handler = AuthServiceHandler::getInstance();
 
     // get an instance of the client handler
-    _client_handler = ClientHandler::getInstance();
+    _file_handler = FileHandler::getInstance();
 
     // get an instance of the command handler
     _command_handler = CommandHandler::getInstance();
@@ -46,8 +45,8 @@ void DFSClient::start() {
     getHostAndPort(_configs.getServers()["file"].c_str(), file__server_host, file_server_port);
 
     std::string command_str;
-    Request *request;
-    Response *response;
+    FileRequest *request;
+    FileResponse *response;
 
     // client main loop
     while (true) {
@@ -69,16 +68,16 @@ void DFSClient::start() {
         if (command.type == "put") {
             // read the file
             char *file_contents = nullptr;
-            size_t file_size = _client_handler->handlePut(command.option.c_str(), file_contents);
+            size_t file_size = _file_handler->handlePut(command.option.c_str(), file_contents);
 
             // data object for sending request to metadata server
             Data data{nullptr, file_size};
 
             // construct the request
-            request = _client_handler->constructRequest(command, data, _access_token);
+            request = _file_handler->constructRequest(command, data, _access_token);
 
             // write the request to the metadata server
-            if (_client_handler->writeRequest(sockfd, request) == -1) {
+            if (_file_handler->writeRequest(sockfd, request) == -1) {
                 std::cerr << "Failed to write the request" << std::endl;
                 delete request;
                 close(sockfd);
@@ -87,9 +86,9 @@ void DFSClient::start() {
             delete request;
 
             // wait for a response
-            response = _client_handler->readResponse(sockfd);
+            response = _file_handler->readResponse(sockfd);
             if (response != nullptr) {
-                std::cout << "Response - " << response->code << " : " << response->message << std::endl;
+                std::cout << "FileResponse - " << response->code << " : " << response->message << std::endl;
             }
 
             // process the response from metadata server and add the blocks to the locations
@@ -98,7 +97,7 @@ void DFSClient::start() {
             
             for (std::string option: response->options) {
                 std::stringstream ss(option);
-                ss >> block.block_id >> block.start >> block.end >> block.location.ip >> block.location.port;
+                ss >> block.block_id >> block.file_uuid >> block.start >> block.end >> block.primary_node.ip >> block.primary_node.port;
                 blocks.push_back(block);
             }
 
@@ -118,7 +117,7 @@ void DFSClient::start() {
 }
 
 void DFSClient::writeBlock(const char *file_contents, Block block) {
-    Command command {"put", block.block_id};
+    Command command {"put", block.file_uuid + ":" + std::to_string(block.block_id)};
 
     char *block_contents = new char[block.end - block.start + 2];
     memset(block_contents, 0, block.end - block.start + 2);
@@ -126,16 +125,16 @@ void DFSClient::writeBlock(const char *file_contents, Block block) {
 
     Data data{block_contents, block.end - block.start + 1};
 
-    Request *request = _client_handler->constructRequest(command, data, _access_token);
+    FileRequest *request = _file_handler->constructRequest(command, data, _access_token);
 
-    // Connect to the server
-    int sockfd = connectToServer(block.location.ip.c_str(), std::to_string(block.location.port).c_str());
+    // Connect to the primary block node server
+    int sockfd = connectToServer(block.primary_node.ip.c_str(), block.primary_node.port.c_str());
 
     // send the request
-    _client_handler->writeRequest(sockfd, request);
+    _file_handler->writeRequest(sockfd, request);
 
     // wait for the response
-    Response *response = _client_handler->readResponse(sockfd);
+    FileResponse *response = _file_handler->readResponse(sockfd);
 
     if (response->code == "201") {
         std::cout << "Block written successfully!" << std::endl;

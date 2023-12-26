@@ -4,11 +4,11 @@
 #include "cache/cache.h"
 #include "concurrency/threadpool.h"
 #include "concurrency/queue.h"
-#include "vo/metadata.h"
 #include "handler/metadata_handler.h"
-#include "handler/request_response_handler.h"
+#include "handler/file_handler.h"
 #include "config/configs.h"
 #include "discovery/listener.h"
+#include "vo/file.h"
 
 class FileServer {
     private:
@@ -31,14 +31,16 @@ class FileServer {
         MetadataHandler *_metadata_handler;
 
         // request response handler
-        RequestResponseHandler *_req_res_handler;
+        FileHandler *_file_handler;
 
         // file metadata cache
-        Cache<std::string, FileMetadata> _metadata_cache;
+        Cache<std::string, File> _metadata_cache;
 
         const static int SERVER_BACKLOG = 30;
 
         void processClientRequests();
+
+        void updateMetadataCache(std::string, std::vector<std::string>);
 
     public:
         FileServer(const char *);

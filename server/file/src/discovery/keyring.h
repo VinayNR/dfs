@@ -1,7 +1,7 @@
 #pragma once
 
 #include "tree.h"
-#include "node.h"
+#include "../vo/node.h"
 
 class KeyRing {
     private:
@@ -21,6 +21,8 @@ class KeyRing {
         void remove(u_int32_t);
 
         INode getNodeForKey(u_int32_t);
+        INode getNextNode(const INode &);
+        INode getNextNode(u_int32_t);
 };
 
 KeyRing::KeyRing() {
@@ -60,4 +62,12 @@ void KeyRing::remove(u_int32_t node_digest) {
 INode KeyRing::getNodeForKey(u_int32_t key) {
     // return in order successor in the key ring
     return _node_map[_tree->getInOrderSuccessor(key%_ring_size)];
+}
+
+INode KeyRing::getNextNode(u_int32_t node_pos) {
+    return _node_map[_tree->getInOrderSuccessor(node_pos%_ring_size + 1)];
+}
+
+INode KeyRing::getNextNode(const INode &node) {
+    return _node_map[_tree->getInOrderSuccessor(node.node_digest%_ring_size + 1)];
 }

@@ -14,11 +14,6 @@ MetadataHandler* MetadataHandler::getInstance() {
 }
 
 std::vector<Block> MetadataHandler::calculateBlocks(std::string unique_file_uuid, size_t filesize, size_t min_chunk_size_bytes, u_int16_t max_chunks) {
-    Response *response = new Response;
-
-    // check the size of file
-    std::cout << "Data size: " << filesize << std::endl;
-
     // decide the number of chunks
     size_t chunk_size = min_chunk_size_bytes;
     u_int16_t number_of_chunks = static_cast<u_int16_t>(std::ceil(static_cast<double>(filesize) / chunk_size));
@@ -26,23 +21,20 @@ std::vector<Block> MetadataHandler::calculateBlocks(std::string unique_file_uuid
         number_of_chunks = max_chunks;
         chunk_size = static_cast<size_t>(std::ceil(static_cast<double>(filesize) / number_of_chunks));
     }
-
-    std::cout << "Number of chunks: " << number_of_chunks << std::endl;
-    std::cout << "Chunk size: " << chunk_size << std::endl;
     
     // determine block locations
     std::vector<size_t> block_boundaries = determineBlockBoundaries(filesize, number_of_chunks, chunk_size);
     std::vector<Block> blocks;
 
     size_t start = 0, end = -1;
-    for (u_int16_t block_num = 0; block_num < block_boundaries.size(); block_num++) {
+    for (uint32_t block_num = 0; block_num < block_boundaries.size(); block_num++) {
         end = block_boundaries.at(block_num);
-        blocks.push_back(Block{unique_file_uuid + ":" + std::to_string(block_num), start, end-1, {}});
+        blocks.push_back(Block{block_num, unique_file_uuid, start, end-1});
         start = end;
     }
 
     // add the last block
-    blocks.push_back(Block{unique_file_uuid + ":" + std::to_string(block_boundaries.size()), start, filesize-1, {}});
+    blocks.push_back(Block{block_boundaries.size(), unique_file_uuid, start, filesize-1, {}});
 
     return blocks;
 }

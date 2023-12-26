@@ -2,12 +2,15 @@
 #include "crypto/jwt.h"
 #include "utils/utils.h"
 
-FileServer::FileServer(const char *config_file_path) {
+FileServer::FileServer(const char *config_file_path):
+ _discovery_server([this](std::string node_domain, std::vector<std::string> blocks) {
+        this->updateMetadataCache(node_domain, blocks);
+    }) {
     // load the configs
     _configs = FileServerConfigs::loadConfigs(config_file_path);
 
     // get an instance of the request response handler
-    _req_res_handler = RequestResponseHandler::getInstance();
+    _file_handler = FileHandler::getInstance();
 
     // get an instance of the file metadata handler
     _metadata_handler = MetadataHandler::getInstance();
@@ -16,6 +19,38 @@ FileServer::FileServer(const char *config_file_path) {
 void FileServer::setupSocket() {
     // set up a TCP socket and bind to the port
     _listen_socket_fd = setupListeningSocket(_configs.getPort(), SOCK_STREAM);
+}
+
+void FileServer::updateMetadataCache(std::string node_domain, std::vector<std::string> blocks) {
+    for (std::string block_str: blocks) {
+        // get the file uuid for the block
+        size_t last_colon_pos = block_str.find_last_of(':');
+        
+        if (last_colon_pos != std::string::npos) {
+            // Extract the substring starting from the position after the last ':'
+            std::string file_uuid = block_str.substr(0, last_colon_pos);
+            size_t block_id = std::stoi(block_str.substr(last_colon_pos + 1));
+
+            // iterate through the metadata cache
+            File file = _metadata_cache.get(file_uuid);
+            for (Block block: file.blocks) {
+                if (block.block_id == block_id) {
+                    // iterate through the node locations and update the is sync attribute to true
+                    for (BlockNodeLocation &node_location: block.block_locations) {
+                        if (node_location.block_node.getFullDomain() == node_domain) {
+                            node_location.is_synced = true;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        else {
+            // Handle the case where ':' is not found
+            std::cout << "No ':' found in the string." << std::endl;
+        }
+    }
 }
 
 void FileServer::createClientThreadPool(int num_threads) {
@@ -41,8 +76,8 @@ void FileServer::startDiscovery() {
 void FileServer::processClientRequests() {
     std::cout << std::endl << " ------ File Server Thread Pool: " << std::this_thread::get_id() << " ------ " << std::endl;
 
-    Request *request;
-    Response *response;
+    FileRequest *request;
+    FileResponse *response;
 
     while (true) {
         // take a connection from the queue
@@ -53,7 +88,7 @@ void FileServer::processClientRequests() {
             std::cout << std::this_thread::get_id() << " obtained a client socket: " << client_sockfd << std::endl;
 
             // do something here
-            request = _req_res_handler->readRequest(client_sockfd);
+            request = _file_handler->readRequest(client_sockfd);
 
             // validate the request
             std::cout << "Access token: " << request->access_token << std::endl;
@@ -84,32 +119,44 @@ void FileServer::processClientRequests() {
                             std::string unique_file_uuid = payload.sub + ":" + request->command.option;
                             std::vector<Block> file_blocks = _metadata_handler->calculateBlocks(unique_file_uuid, request->data.size, _configs.getMinChunkSizeBytes(), _configs.getMaxChunks());
 
+                            INode primary_node, replica_node;
+
                             // determine the location of the blocks
                             for (Block& block : file_blocks) {
                                 // get the block digest
-                                unsigned int block_digest = computeMD5(block.block_id);
+                                unsigned int block_digest = computeMD5(block.file_uuid + std::to_string(block.block_id));
 
                                 // check the position on the keyring
-                                INode node = _discovery_server.getKeyRing().getNodeForKey(block_digest);
+                                primary_node = _discovery_server.getKeyRing().getNodeForKey(block_digest);
 
-                                // Modify the original Block object
-                                block.location.ip = node.ip;
-                                block.location.port = std::stoi(node.port);
+                                block.block_locations.push_back({primary_node, true, false});
+
+                                // get nodes that will hold the replica for this block
+                                uint32_t node_key = primary_node.node_digest;
+                                
+                                for (int i=1; i<_configs.getReplicationFactor(); i++) {
+                                    // get the next node on this ring
+                                    replica_node = _discovery_server.getKeyRing().getNextNode(node_key);
+
+                                    node_key = replica_node.node_digest;
+
+                                    block.block_locations.push_back({replica_node, true, false});
+                                }
                             }
 
-                            // create the file metadata
-                            FileMetadata file_metadata;
-                            file_metadata.file_name = request->command.option;
-                            file_metadata.owner = payload.sub;
-                            file_metadata.unique_file_uuid = unique_file_uuid;
-                            file_metadata.blocks = file_blocks;
-                            file_metadata.num_blocks = file_blocks.size();
+                            // create the file and add to the data metadata cache
+                            File file;
+                            file.file_attr.file_name = request->command.option;
+                            file.file_attr.file_owner = payload.sub;
+                            file.file_attr.file_uuid = unique_file_uuid;
+                            file.file_attr.file_size = request->data.size;
+                            file.blocks = file_blocks;
 
                             // add the file metadata to the cache
-                            _metadata_cache.set(unique_file_uuid, file_metadata);
+                            _metadata_cache.set(unique_file_uuid, file);
 
                             // respond back to the client
-                            response = new Response;
+                            response = new FileResponse;
                             response->code = "200";
                             response->message = "OK";
                             for (Block block: file_blocks) {
@@ -121,19 +168,19 @@ void FileServer::processClientRequests() {
                         }
 
                         // write the response
-                        _req_res_handler->writeResponse(client_sockfd, response);
+                        _file_handler->writeResponse(client_sockfd, response);
                     }
                     else {
                         std::cout << "Token expired" << std::endl;
-                        response = Response::createTokenExpiredResponse();
-                        _req_res_handler->writeResponse(client_sockfd, response);
+                        response = FileResponse::createTokenExpiredResponse();
+                        _file_handler->writeResponse(client_sockfd, response);
                     }
                 }
             }
             else {
                 std::cout << "Token is invalid" << std::endl;
-                response = Response::createForbiddenResponse();
-                _req_res_handler->writeResponse(client_sockfd, response);
+                response = FileResponse::createForbiddenResponse();
+                _file_handler->writeResponse(client_sockfd, response);
             }
 
             // close the socket after communication is complete

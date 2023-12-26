@@ -34,6 +34,10 @@ int FileServerConfigs::getMaxChunks() {
     return _max_chunks;
 }
 
+int FileServerConfigs::getReplicationFactor() {
+    return _replication_factor;
+}
+
 // loader
 FileServerConfigs FileServerConfigs::loadConfigs(const std::string &filename) {
     std::cout << std::endl << " ----------- Loading server config file ----------- " << std::endl;
@@ -52,6 +56,7 @@ FileServerConfigs FileServerConfigs::loadConfigs(const std::string &filename) {
             configs._secret = jsonData["config"]["secret"].get<std::string>();
             configs._min_chunk_size_bytes = jsonData["config"]["minChunkSizeBytes"].get<int>();
             configs._max_chunks = jsonData["config"]["maxChunks"].get<int>();
+            configs._replication_factor = jsonData["config"]["replicationFactor"].get<int>();
         }
         else {
             std::cerr << "Error opening JSON file: " << filename << std::endl;

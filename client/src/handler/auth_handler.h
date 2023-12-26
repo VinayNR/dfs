@@ -2,7 +2,8 @@
 
 #include<string>
 
-#include "../vo/auth.h"
+#include "../vo/auth_request.h"
+#include "../vo/auth_response.h"
 
 class AuthServiceHandler {
     private:

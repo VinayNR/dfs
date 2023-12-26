@@ -12,6 +12,7 @@ class FileServerConfigs {
         std::string _secret;
         int _min_chunk_size_bytes;
         int _max_chunks;
+        int _replication_factor;
 
     public:
         std::string getName();
@@ -21,6 +22,7 @@ class FileServerConfigs {
         std::string getSecret();
         int getMinChunkSizeBytes();
         int getMaxChunks();
+        int getReplicationFactor();
 
         // loader
         static FileServerConfigs loadConfigs(const std::string &);

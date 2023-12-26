@@ -10,12 +10,12 @@ NodeServiceHandler* NodeServiceHandler::getInstance() {
     return &instance;
 }
 
-int NodeServiceHandler::writeNodeConnectRequest(int sockfd, NodeConnectRequest *request) {
+int NodeServiceHandler::writeNodeRequest(int sockfd, NodeRequest *request) {
     char *buffer = nullptr;
     int exit_code = 0;
 
     // serialize the request
-    size_t size = serializeNodeConnectRequest(request, buffer);
+    size_t size = request->serialize(buffer);
     if (SocketOps::send(sockfd, buffer, size) == -1) {
         std::cerr << "Failed to send response" << std::endl;
         exit_code = 1;
@@ -36,7 +36,7 @@ LeaderResponse* NodeServiceHandler::readLeaderResponse(int sockfd) {
     }
 
     // deserialize the request
-    LeaderResponse *response = deserializeLeaderResponse(buffer);
+    LeaderResponse *response = LeaderResponse::deserialize(buffer);
 
     // clean up
     deleteAndNullifyPointer(buffer, true);
@@ -44,7 +44,7 @@ LeaderResponse* NodeServiceHandler::readLeaderResponse(int sockfd) {
     return response;
 }
 
-Request * NodeServiceHandler::readFileRequest(int sockfd) {
+FileRequest * NodeServiceHandler::readFileRequest(int sockfd) {
     char *buffer = nullptr;
     std::vector<char> v;
     int buffer_size = 0;
@@ -93,7 +93,7 @@ Request * NodeServiceHandler::readFileRequest(int sockfd) {
     deleteAndNullifyPointer(buffer, true);
 
     // deserialize the request
-    Request *request = Request::deserialize(v.data());
+    FileRequest *request = FileRequest::deserialize(v.data());
 
     if (total_length > 0) {
         std::cout << "Length of data read: " << total_length << std::endl;
@@ -103,7 +103,7 @@ Request * NodeServiceHandler::readFileRequest(int sockfd) {
     return request;
 }
 
-int NodeServiceHandler::writeFileReceiptResponse(int sockfd, Response *response) {
+int NodeServiceHandler::writeFileReceiptResponse(int sockfd, FileResponse *response) {
     char *buffer = nullptr;
     int exit_code = 0;
 

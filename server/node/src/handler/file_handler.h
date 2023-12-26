@@ -6,7 +6,7 @@ class FileHandler {
     private:
         const static int MAX_BUFFER_LENGTH = 4096;
 
-        const std::string _STORAGE_PATH = "../storage/";
+        const std::string _STORAGE_PATH = "./storage/";
 
         FileHandler();
 

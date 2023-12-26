@@ -99,6 +99,9 @@ int SocketOps::receive(int sockfd, char *& buffer, int MAX_BUFFER_LENGTH, int ti
 int SocketOps::sendTo(int sockfd, const char *buffer, size_t size, struct sockaddr *remote_address) {
     socklen_t serverlen = sizeof(struct sockaddr);
 
+    std::cout << "Sending data of size: " << size << std::endl;
+    std::cout << "Buffer: " << buffer << std::endl;
+
     // Send the data
     int bytesSent = sendto(sockfd, buffer, size, 0, remote_address, serverlen);
 

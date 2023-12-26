@@ -1,5 +1,12 @@
 #pragma once
 
+#include<string>
+
+#include "../vo/file_request.h"
+#include "../vo/file_response.h"
+#include "file_handler.h"
+
+
 class FileHandler {
     private:
         const static int MAX_BUFFER_LENGTH = 4096;
@@ -12,6 +19,13 @@ class FileHandler {
 
     public:
         static FileHandler* getInstance();
+
+        FileResponse* readResponse(int);
+        int writeRequest(int, FileRequest *);
+
+        int handlePut(const char *, char *&);
+
+        FileRequest * constructRequest(Command, Data, const std::string &);
 
         int getFile(const char *, char *&);
         int putFile(const char *, char *, int);

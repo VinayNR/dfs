@@ -4,14 +4,16 @@
 #include "../net/utils.h"
 #include "../concurrency/threadpool.h"
 #include "../concurrency/queue.h"
+#include "../vo/node_request.h"
+#include "../handler/node_handler.h"
 #include "../utils/utils.h"
-#include "connect.h"
 #include "keyring.h"
-#include "node.h"
 #include "node_health.h"
 
 #include <iostream>
 #include <unordered_map>
+
+using NodeBlockCacheCallback = std::function<void(std::string, std::vector<std::string>)>;
 
 class NodeDiscoveryListener {
     private:
@@ -27,8 +29,14 @@ class NodeDiscoveryListener {
         // health manager for managing keep alive heart beats of followers
         NodeHealthManager _node_health_manager;
 
+        // node handler object
+        NodeHandler *_node_handler;
+
+        // callback for updating the metadata cache server
+        NodeBlockCacheCallback _cb;
+
     public:
-        NodeDiscoveryListener();
+        NodeDiscoveryListener(NodeBlockCacheCallback);
 
         void start(int, int);
 
@@ -37,28 +45,62 @@ class NodeDiscoveryListener {
         void evictNode(INode);
 
         KeyRing getKeyRing();
+
+        NodeRequest* receiveHeartBeat(int, struct sockaddr *&);
 };
 
 // default constructor
-NodeDiscoveryListener::NodeDiscoveryListener() :
+NodeDiscoveryListener::NodeDiscoveryListener(NodeBlockCacheCallback cb) :
     _node_health_manager([this](INode node) {
         this->evictNode(node);
     }) {
+        // get an instance of the file metadata handler
+        _node_handler = NodeHandler::getInstance();
+
+        _cb = cb;
 }
 
 KeyRing NodeDiscoveryListener::getKeyRing() {
     return _keyring;
 }
 
+
+NodeRequest* NodeDiscoveryListener::receiveHeartBeat(int sockfd, struct sockaddr *& remote_address) {
+    socklen_t serverlen = sizeof(struct sockaddr);
+
+    // create the packet buffer data that is filled by the network
+    char *buffer = new char[4096];
+    memset(buffer, 0, 4096);
+    
+    // Receive a packet
+    int bytesReceived = recvfrom(sockfd, buffer, 4096, 0, remote_address, &serverlen);
+
+    if (bytesReceived == -1)  {
+        return nullptr;
+    }
+
+    // deserialize the buffer
+    NodeRequest *request = NodeRequest::deserialize(buffer);
+
+    // clean up pointers
+    deleteAndNullifyPointer(buffer, true);
+
+    return request;
+}
+
 void NodeDiscoveryListener::listenForHeartBeats() {
     struct sockaddr *remote_address = nullptr;
     std::cout << "Listening for heart beats" << std::endl;
-    NodeConnectRequest *heart_beat;
+    NodeRequest *heart_beat;
     while (true) {
         heart_beat = receiveHeartBeat(_keep_alive_socket_fd, remote_address);
         std::cout << "Heart beat received from: " << heart_beat->node.getFullDomain() << std::endl;
 
+        // record the heart beat
         _node_health_manager.recordHeartBeat(heart_beat->node.getFullDomain());
+
+        // update the metadata cache object
+        _cb(heart_beat->node.getFullDomain(), heart_beat->blocks);
 
         delete remote_address;
         remote_address = nullptr;
@@ -71,8 +113,8 @@ void NodeDiscoveryListener::start(int discovery_port, int keep_alive_port) {
     // setup the listening socket for the discovery server
     _listen_socket_fd = setupListeningSocket(discovery_port, SOCK_STREAM);
 
+    // setup the listening socket for the keep alive server
     _keep_alive_socket_fd = setupListeningSocket(keep_alive_port, SOCK_DGRAM);
-    // std::cout << "Keep alive Socket FD: " << _keep_alive_socket_fd << " bound to " << keep_alive_port << std::endl;
 
     // setup a new thread to listen to heart beats
     std::thread heart_beat_thread(&NodeDiscoveryListener::listenForHeartBeats, this);
@@ -86,7 +128,7 @@ void NodeDiscoveryListener::start(int discovery_port, int keep_alive_port) {
         std::cout << "Received a request on socket: " << client_sockfd << std::endl;
 
         // read the request
-        NodeConnectRequest *request = readNodeConnectRequest(client_sockfd);
+        NodeRequest *request = _node_handler->readRequest(client_sockfd);
 
         if (request == nullptr) {
             SocketOps::closeSocket(client_sockfd);
@@ -110,7 +152,7 @@ void NodeDiscoveryListener::start(int discovery_port, int keep_alive_port) {
 
             // send a response back
             LeaderResponse *response = new LeaderResponse{"200", "OK"};
-            writeLeaderResponse(client_sockfd, response);
+            _node_handler->writeResponse(client_sockfd, response);
         }
 
         SocketOps::closeSocket(client_sockfd);

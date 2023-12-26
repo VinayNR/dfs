@@ -2,12 +2,14 @@
 
 #include "net/sockets.h"
 #include "config/client_config.h"
+
 #include "handler/auth_handler.h"
-#include "handler/client_handler.h"
+#include "handler/file_handler.h"
 #include "handler/command_handler.h"
-#include "vo/request.h"
-#include "vo/response.h"
-#include "vo/blocks.h"
+
+#include "vo/file_request.h"
+#include "vo/file_response.h"
+#include "vo/block.h"
 
 class DFSClient {
     private:
@@ -21,7 +23,7 @@ class DFSClient {
         CommandHandler *_command_handler;
 
         // file service handler
-        ClientHandler *_client_handler;
+        FileHandler *_file_handler;
 
         std::string _access_token;
 

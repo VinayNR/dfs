@@ -1,8 +1,9 @@
 #include "node_server.h"
 
-#include "formats/message.h"
 #include "net/utils.h"
 #include "net/sockets.h"
+#include "utils/utils.h"
+#include "vo/node_request.h"
 
 NodeServer::NodeServer(const char *config_file_path) {
     // load the configs for the server
@@ -48,32 +49,32 @@ int NodeServer::discover() {
         return 1;
     }
 
-    _discovery_socket_fd = connectToServer(_configs.getDiscoveryServer().c_str(), std::to_string(_configs.getDiscoveryPort()).c_str());
-    std::cout << "Discovery FD: " << _discovery_socket_fd << std::endl;
+    int sockfd = connectToServer(_configs.getDiscoveryServer().c_str(), std::to_string(_configs.getDiscoveryPort()).c_str());
+    std::cout << "Discovery FD: " << sockfd << std::endl;
 
     // construct the request
-    NodeConnectRequest *request = new NodeConnectRequest("CONNECT", INode("127.0.0.1", std::to_string(_configs.getPort())), _configs.getHeartBeatInterval());
+    NodeRequest *request = new NodeRequest("CONNECT", INode{"127.0.0.1", std::to_string(_configs.getPort())}, _configs.getHeartBeatInterval(), &_block_cache);
 
     // send the request
-    _node_handler->writeNodeConnectRequest(_discovery_socket_fd, request);
+    _node_handler->writeNodeRequest(sockfd, request);
 
     // wait for the response
-    LeaderResponse *response = _node_handler->readLeaderResponse(_discovery_socket_fd);
+    LeaderResponse *response = _node_handler->readLeaderResponse(sockfd);
     if (response->code != "200") {
         std::cerr << "Failed during discovery" << std::endl;
-        SocketOps::closeSocket(_discovery_socket_fd);
+        SocketOps::closeSocket(sockfd);
         return 1;
     }
 
-    SocketOps::closeSocket(_discovery_socket_fd);
+    SocketOps::closeSocket(sockfd);
     return 0;
 }
 
 void NodeServer::processClientRequests() {
     std::cout << std::endl << " ------ Node Server Thread Pool: " << std::this_thread::get_id() << " ------ " << std::endl;
 
-    Request *request;
-    Response *response;
+    FileRequest *request;
+    FileResponse *response;
 
     while (true) {
         // take a connection from the queue
@@ -91,8 +92,11 @@ void NodeServer::processClientRequests() {
                 // write the file to disk
                 _file_handler->putFile(request->command.option.c_str(), request->data.data, request->data.size);
 
+                // write to the node's block cache
+                _block_cache.set(request->command.option.c_str(), true);
+
                 // send a repsonse back
-                response = Response::createFileSuccessResponse();
+                response = FileResponse::createFileSuccessResponse();
                 _node_handler->writeFileReceiptResponse(client_sockfd, response);
             }
             else if (request->command.type == "get") {
@@ -140,18 +144,19 @@ void NodeServer::sendKeepaliveHeartBeats() {
     }
     
     // construct the request and the message buffer
-    NodeConnectRequest *heart_beats = new NodeConnectRequest("ALIVE", INode("127.0.0.1", std::to_string(_configs.getPort())), _configs.getHeartBeatInterval());
+    NodeRequest *heart_beats = new NodeRequest("ALIVE", INode{"127.0.0.1", std::to_string(_configs.getPort())}, _configs.getHeartBeatInterval(), &_block_cache);
     
     char *buffer = nullptr;
-    int exit_code = 0;
-
-    // serialize the request
-    size_t size = serializeNodeConnectRequest(heart_beats, buffer);
 
     // keep sending every interval
     while (true) {
+        // serialize the request
+        size_t size = heart_beats->serialize(buffer);
+
         // send the request
         SocketOps::sendTo(_heart_beats_socket_fd, buffer, size, discovery_server);
+
+        deleteAndNullifyPointer(buffer, true);
 
         // Sleep for timeout seconds
         std::cout << "Sent a heart beat" << std::endl;

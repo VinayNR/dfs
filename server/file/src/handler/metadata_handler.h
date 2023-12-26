@@ -1,9 +1,7 @@
 #pragma once
 
-#include "../vo/request.h"
-#include "../vo/response.h"
-#include "../vo/metadata.h"
 #include "../config/configs.h"
+#include "../vo/block.h"
 
 class MetadataHandler {
     private:
